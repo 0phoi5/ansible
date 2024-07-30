@@ -1,0 +1,29 @@
+---
+- name: "PLAY - Disabling TRACK and TRACE"
+  hosts: all
+  gather_facts: true
+  serial: 30
+
+  tasks:
+    - name: "Backing up httpd.conf"
+      copy:
+        src: /etc/httpd/conf/httpd.conf
+        dest: "/etc/httpd/conf/httpd.conf.backup.{{ ansible_date_time.date }}"
+        force: false
+        remote_src: yes
+
+    - name: "Amending httpd.conf"
+      blockinfile:
+        path: /etc/httpd/conf/httpd.conf
+        block: |
+          # Disable TRACE and TRACK methods
+          TraceEnable off
+        create: no
+        insertafter: EOF
+      notify: Restarting HTTPD
+
+  handlers:
+    - name: "Restarting HTTPD"
+      service:
+        name: httpd
+        state: restarted
