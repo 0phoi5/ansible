@@ -1,0 +1,22 @@
+---
+- block:
+
+  - include_role:
+      name: /ansible/snapshots/roles/take_snapshot
+    vars:
+      host_to_snap: "{{ inventory_hostname }}"
+      snap_reason: "Patching"
+      snap_source: "input_source_here"
+    when: server_type.rc == 0
+
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Unable to take vSphere snapshot' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Unable to take a vSphere Snapshot of {{ inventory_hostname }}. This could be because it has disks that can't be snapshot, although the playbook should be accounting for those, or the Unix vSphere user SVC_Linux_Patching couldn't find the hostname. You may need to take a manual snapshot to be on the safe side."
+
+- debug:
+    msg: "Server {{ inventory_hostname }} is Physical, therefore a vSphere snapshot is irrelevant. Snapshot step will be skipped."
+  when: server_type.rc != 0
