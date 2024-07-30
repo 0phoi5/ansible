@@ -1,0 +1,13 @@
+---
+- name: "Checking each server for outstanding yum updates"
+  yum:
+    list: updates
+    update_cache: true
+  register: yumoutput
+  changed_when: yumoutput.results|length > 0
+
+- name: "Adding servers that are already up-to-date in to output.log"
+  shell:
+    cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [  OK  ] No outstanding updates' >> /ansible/patching/output.log
+  delegate_to: localhost
+  when: yumoutput.results|length == 0
