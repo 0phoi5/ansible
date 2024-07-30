@@ -1,0 +1,66 @@
+---
+- block:
+  - name: "Checking server is Red Hat"
+    assert:
+      that:
+        - ansible_distribution == 'RedHat'
+      fail_msg: "This server is not RHEL."
+      success_msg: "Server is RHEL."
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Server is not Red Hat' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Server {{ inventory_hostname }} is not Red Hat."
+
+- block:
+  - name: "Rolling out all Check_MK bespoke scripts and plugins within /usr/lib/check_mk_agent"
+    synchronize:
+      archive: true
+      checksum: true
+      recursive: true
+      delete: true
+      src: /usr/lib/check_mk_agent
+      dest: /usr/lib/
+      mode: push
+      use_ssh_args: true
+    tags:
+      - config
+      - cmk
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Unable to roll out Check_MK bespoke scripts and plugins to /usr/lib/check_mk_agent' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Unable to roll out Check_MK bespoke scripts and plugins to /usr/lib/check_mk_agent, on {{ inventory_hostname }}. Is the Check_MK agent installed?"
+
+- block:
+  - name: "Determining whether the server is Virtual or Physical"
+    shell: dmidecode -s system-manufacturer | grep -i VMware
+    register: server_phys_virt
+    changed_when: server_phys_virt.rc == 1
+    failed_when: server_phys_virt.rc not in [0,1]
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Unable to determine if the server is physical or virtual, using dmidecode.' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Unable to determine if the server is physical or virtual, using dmidecode, on {{ inventory_hostname }}. This is unexpected and you may have to patch this server manually and take a look at the Ansible script."
+
+- name: "Setting whether the server is Virtual or Physical as a fact, for later use"
+  set_fact: server_type="{{ server_phys_virt }}"
+
+- name: "Cleaning up Rescue Kernels"
+  shell: |
+    for k in $(ls -1 /boot/vmlinuz-0-rescue-* 2>/dev/null | grep -v "$(cat /etc/machine-id)")
+    do
+      rm -f "$k" "${k/vmlinuz-/initramfs-}.img"
+      grubby --remove-kernel="$k"
+    done
+
+- name: "Unsetting release via subscription manager"
+  command:
+    cmd: "subscription-manager release --unset"
