@@ -1,0 +1,137 @@
+---
+- block:
+  - name: "Detecting Splunk"
+    shell: systemctl list-units | grep -wc splunk.service
+    register: splunk_service
+    failed_when: splunk_service.rc == 257
+
+  - debug:
+      msg: "No Splunk instances were found on {{ inventory_hostname }}"
+    when: splunk_service.stdout == '0'
+
+  - debug:
+      msg: "!! WARNING !!! Splunk is running on {{ inventory_hostname }}"
+    when: splunk_service.stdout > '0'
+
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Unable to detect whether Splunk is running on the server.' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Unable to determine if Splunk is running on {{ inventory_hostname }}. This is unexpected and may be an issue with the Ansible patching script."
+
+- block:
+  - name: "Stopping Splunk"
+    service:
+      name: splunk
+      state: stopped
+    when: splunk_service.stdout != '0'
+
+  - name: "Making sure Splunk shut down successfully"
+    shell: ps -e -o pid,cmd | grep "splunkd.*start" | grep -v -E "grep|process-runner" | awk '{ print $1 }' | head -n 1
+    register: splunk_success
+    failed_when: splunk_success.stdout != ""
+    when: splunk_service.stdout != '0'
+
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Splunk did not shut down' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Splunk failed to shut down on {{ inventory_hostname }}."
+
+
+##############################################################
+
+
+- block:
+  - name: "Detecting Tomcat"
+    shell: systemctl list-units | grep -wc tomcat.service
+    register: tomcat_service
+    failed_when: tomcat_service.rc == 257
+
+  - debug:
+      msg: "No Tomcat instances were found on {{ inventory_hostname }}"
+    when: tomcat_service.stdout == '0'
+
+  - debug:
+      msg: "!! WARNING !!! Tomcat is running on {{ inventory_hostname }}"
+    when: tomcat_service.stdout > '0'
+
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Unable to detect whether Tomcat is running on the server.' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Unable to determine if Tomcat is running on {{ inventory_hostname }}. This is unexpected and may be an issue with the Ansible patching script."
+
+- block:
+  - name: "Stopping Tomcat"
+    service:
+      name: tomcat
+      state: stopped
+    when: tomcat_service.stdout != '0'
+
+  - name: "Making sure Tomcat shut down successfully"
+    shell: ps -e -o cmd | grep catalina.startup | grep -v grep | head -n 1
+    register: tomcat_success
+    failed_when: tomcat_success.stdout != ""
+    when: tomcat_service.stdout != '0'
+
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Tomcat did not shut down' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Tomcat failed to shut down on {{ inventory_hostname }}."
+
+
+##############################################################
+
+
+- block:
+  - name: "Detecting Oracle Databases"
+    shell: ps -e -o cmd | grep ora_pmon_ | grep -v grep | cut -d"_" -f3 | sort
+    register: oracledb_service
+
+  - debug:
+      msg: "No Oracle databases were found on {{ inventory_hostname }}"
+    when: oracledb_service.stdout == ''
+
+  - debug:
+      msg: "!! WARNING !!! Oracle Databases are running on {{ inventory_hostname }}"
+    when: oracledb_service.stdout != ''
+
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Unable to detect Oracle DBs' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Unable to determine if there are any Oracle Databases running on {{ inventory_hostname }}. This is unexpected and may be an issue with the Ansible patching script."
+
+- block:
+  - name: "Stopping Oracle Databases using script"
+    shell:
+      cmd: "/path/to/script/stop_dbs.sh"
+    become: yes
+    become_user: oracle
+    when: oracledb_service.stdout != ''
+
+  - name: "Making sure Oracle Databases shut down successfully"
+    shell: ps -e -o cmd | grep ora_pmon_ | grep -v grep | cut -d"_" -f3 | sort
+    register: oracle_success
+    failed_when: oracle_success.stdout != ""
+    when: oracledb_service.stdout != ''
+
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Oracle Databases failed to shut down' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Not all Oracle Databases successfully shut down on {{ inventory_hostname }}."
