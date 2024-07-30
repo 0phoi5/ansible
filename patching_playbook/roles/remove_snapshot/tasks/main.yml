@@ -1,0 +1,22 @@
+---
+- block:
+
+   - name: "Removing snapshot for {{ inventory_hostname }} - onprem servers"
+     delegate_to: localhost
+     shell:
+       cmd: "echo 'Connect-VIServer host1234.company-name.co.uk -User USERNAME -Password blablabla; Get-VM '{{ inventory_hostname }}' | Get-Snapshot | Where-Object Name -like \"Ansible Automated Snapshot\" | Remove-Snapshot -Confirm:$false; Disconnect-VIServer -Confirm:$false' | pwsh"
+     when: "'onprem' in inventory_hostname"
+
+   - name: "Removing snapshot for {{ inventory_hostname }} - dmz servers"
+     delegate_to: localhost
+     shell:
+       cmd: "echo 'Connect-VIServer host5678.company-name.co.uk -User USERNAME -Password blablabla; Get-VM '{{ inventory_hostname }}' | Get-Snapshot | Where-Object Name -like \"Ansible Automated Snapshot\" | Remove-Snapshot -Confirm:$false; Disconnect-VIServer -Confirm:$false' | pwsh"
+     when: "'dmz' in inventory_hostname"
+
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Unable to remove vSphere snapshot' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Unable to remove the vSphere Snapshot of {{ inventory_hostname }}. Please be sure to delete this snapshot manually!"
