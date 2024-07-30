@@ -1,0 +1,16 @@
+---
+- block:
+  - name: "Placing each server in Maintenance Mode in SCOM"
+    uri:
+      url: "http://scom_mm_hostname/MM/Home/InstantMM/?ComputerName={{ inventory_hostname }}.company-name.co.uk&Min=240&MMAction=Start"
+      return_content: false
+      timeout: 120
+      use_proxy: false
+    delegate_to: localhost
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Couldn't place server in Maintenance Mode in SCOM' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Server {{ inventory_hostname }} failed to go in to Maintenance Mode in SCOM."
