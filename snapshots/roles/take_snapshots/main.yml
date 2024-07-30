@@ -1,0 +1,17 @@
+---
+# Unfortunately we ended up using the shell module to issue this command, as the vmware_guest_snapshot
+# module requires far too much information to use and had teething issues.
+
+- name: "Creating vSphere snapshot - Onprem servers"
+  delegate_to: localhost
+  shell:
+    cmd: "echo 'Connect-VIServer host1234.company-name.co.uk -User USERNAME -Password blablabla; New-Snapshot -VM '{{ host_to_snap }}' -Name \"Ansible Automated Snapshot\" -Confirm:$false -Description \"Snapshot taken automatically via Ansible. The reason was given as: {{ snap_reason }}. The source was: {{ snap_source }}.\" -Memory:$false; Disconnect-VIServer -Confirm:$false' | pwsh | grep -i 'created'"
+  when: "'onprem' in inventory_hostname"
+  register: snapshot_output
+
+- name: "Creating vSphere snapshot - DMZ servers"
+  delegate_to: localhost
+  shell:
+    cmd: "echo 'Connect-VIServer host5678.company-name.co.uk -User USERNAME -Password blablabla; New-Snapshot -VM '{{ host_to_snap }}' -Name \"Ansible Automated Snapshot\" -Confirm:$false -Description \"Snapshot taken automatically via Ansible. The reason was given as: {{ snap_reason }}. The source was: {{ snap_source }}.\" -Memory:$false; Disconnect-VIServer -Confirm:$false' | pwsh | grep -i 'created'"
+  when: "'dmz' in inventory_hostname"
+  register: snapshot_output
