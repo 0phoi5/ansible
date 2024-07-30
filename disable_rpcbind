@@ -1,0 +1,37 @@
+---
+- name: "PLAY - Disabling RPC Bind"
+  hosts: all
+  gather_facts: true
+  serial: 10
+
+  tasks:
+    - name: "Ensure /etc/hosts.allow exists"
+      file:
+        path: /etc/hosts.allow
+        state: touch
+
+    - name: "Ensure /etc/hosts.deny exists"
+      file:
+        path: /etc/hosts.deny
+        state: touch
+
+    - name: "Adding rpcbind config to /etc/hosts.allow"
+      lineinfile:
+        path: /etc/hosts.allow
+        line: "rpcbind: 127.0.0.1"
+      notify: "Restarting nfs-server"
+
+    - name: "Adding rpcbind config to /etc/hosts.deny"
+      lineinfile:
+        path: /etc/hosts.deny
+        line: "rpcbind: ALL"
+      notify: "Restarting nfs-server"
+
+  handlers:
+    - name: "Restarting nfs-server"
+      service:
+        name: nfs-server
+        state: restarted
+      register: result
+      ignore_errors: yes
+      failed_when: "result.failed and 'Could not find the requested service nfs-server' not in result.msg | default('')"
