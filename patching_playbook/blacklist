@@ -1,0 +1,8 @@
+# This file is for listing any hostnames that should NEVER be patched
+# via the Ansible Patching playbook.
+# The Playbook will look in this location and refuse to patch anything
+# listed here.
+#
+# Please place a hash at the beginning of all lines that are not a hostname.
+
+host1234
