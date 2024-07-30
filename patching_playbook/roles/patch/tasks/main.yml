@@ -1,0 +1,52 @@
+---
+- block:
+  # Trigger a yum update Ansible 'Job' on each server, with a fail timeout of 12 minutes
+  - name: "Triggering yum update on each server"
+    yum:
+      name: "*"
+      state: latest
+      disable_gpg_check: true
+    async: 1920
+    poll: 0
+    register: yum_sleeper
+
+  - debug:
+      msg: "Now patching {{ inventory_hostname }}. This may take a few minutes, please wait ... "
+
+  # Await the result of the yum update, polling every 30 seconds for 10 minutes
+  - name: "Awaiting yum update result"
+    async_status:
+      jid: "{{ yum_sleeper.ansible_job_id }}"
+    register: job_result
+    until: job_result.finished
+    retries: 60
+    delay: 30
+
+#  - name: "Checking for errors containing mention of Berkeley DB Library"
+#    debug:
+#      msg: "Found error related to Berkeley DB Library: {{ item }}"
+#    when: "'Berkeley DB Library' in item"
+#    with_items: "{{ yum_update_result.results | map(attribute='stderr_lines') | list | flatten }}"
+
+#  - name: "Rebuilding RPM database and updating cache"
+#    shell: |
+#      rpm --rebuilddb
+#      yum makecache
+#    when: "'Berkeley DB Library' in item"
+#    with_items: "{{ yum_update_result.results | map(attribute='stderr_lines') | list | flatten }}"
+
+#  - name: "Re-running yum update for servers with RPM DB error"
+#    yum:
+#      name: '*'
+#      state: latest
+#      disable_gpg_check: true
+#    when: "'Berkeley DB Library' in item"
+#    with_items: "{{ yum_update_result.results | map(attribute='stderr_lines') | list | flatten }}"
+
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] The yum update failed' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Yum update failed on {{ inventory_hostname }}. Is the repository configured correctly, and can the server communicate with it?"
