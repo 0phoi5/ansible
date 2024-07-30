@@ -1,0 +1,9 @@
+---
+- name: "Getting contents of output.log"
+  shell:
+    cmd: tac /ansible/patching/output.log | grep '#######################' -m 1 -B 9999 | tac
+  register: log_contents
+
+- name: "Summary from the latest Playbook run"
+  debug:
+    msg: "{{ log_contents.stdout_lines | join('\n') }}"
