@@ -1,0 +1,117 @@
+---
+- name: "PLAY - Updating Ciphers"
+  hosts: all
+  gather_facts: true
+  serial: 30
+
+  tasks:
+    - name: "Rolling out /usr/sbin/smm"
+      copy:
+        src: /usr/sbin/smm
+        dest: /usr/sbin/smm
+        mode: 0500
+        owner: root
+        group: root
+
+    - name: "Placing server in Maintenance Mode for 5 minutes"
+      shell:
+        cmd: "/usr/sbin/smm 5"
+
+    - name: "Backing up sshd_config"
+      copy:
+        src: /etc/ssh/sshd_config
+        dest: "/etc/ssh/sshd_config.backup.{{ ansible_date_time.date }}"
+        force: false
+
+    - name: "Backing up krb5.conf"
+      copy:
+        src: /etc/krb5.conf
+        dest: "/etc/krb5.conf.backup.{{ ansible_date_time.date }}"
+        force: false
+
+    - name: "Backing up omiserver.conf"
+      copy:
+        src: /etc/opt/omi/conf/omiserver.conf
+        dest: "/etc/opt/omi/conf/omiserver.conf.{{ ansible_date_time.date }}"
+
+    - name: "Replacing Ciphers in sshd_config"
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^Ciphers'
+        line: 'Ciphers aes128-ctr,aes192-ctr,aes256-ctr,aes128-gcm@openssh.com,aes256-gcm@openssh.com'
+      notify: Restarting SSHD
+
+    - name: "Replacing MACs in sshd_config"
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^MACs'
+        line: 'MACs umac-64@openssh.com,umac-128@openssh.com,hmac-sha2-256,hmac-sha2-512,hmac-sha1'
+      notify: Restarting SSHD
+
+    - name: "Replacing or adding default_tkt_enctypes in krb5.conf"
+      lineinfile:
+        path: /etc/krb5.conf
+        regexp: '^default_tkt_enctypes'
+        line: 'default_tkt_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96'
+        insertafter: '^\[libdefaults\]'
+        state: present
+      notify: Restarting SSHD
+
+    - name: "Replacing or adding default_tgs_enctypes in krb5.conf"
+      lineinfile:
+        path: /etc/krb5.conf
+        regexp: '^default_tgs_enctypes'
+        line: 'default_tgs_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96'
+        insertafter: '^default_tkt_enctypes'
+        state: present
+      notify: Restarting SSHD
+
+    - name: "Replacing Ciphers in omiserver.conf (SCOM Agent)"
+      lineinfile:
+        path: /etc/opt/omi/conf/omiserver.conf
+        regexp: '^sslciphersuite=.*$'
+        line: "sslciphersuite=ALL:-MEDIUM:-LOW"
+      notify: Restarting SCOM Agent
+
+    - name: "Checking whether AD-SUPPORT.pmod exists"
+      stat:
+        path: /etc/crypto-policies/policies/modules/AD-SUPPORT.pmod
+      register: file_status
+      when: ansible_distribution == 'RedHat' and ansible_distribution_major_version|int >= 8
+
+    - name: "Setting fact based on AD-SUPPORT.pmod existing"
+      set_fact:
+        crypto_policies_to_enable: "{{ 'DEFAULT:DISABLE-CBC:AD-SUPPORT' if file_status.stat.exists else 'DEFAULT:DISABLE-CBC' }}"
+      when: ansible_distribution == 'RedHat' and ansible_distribution_major_version|int >= 8
+
+    - name: "Creating or amending DISABLE-CBC.pmod"
+      blockinfile:
+        path: /etc/crypto-policies/policies/modules/DISABLE-CBC.pmod
+        block: |
+          cipher@TLS = -AES-256-CBC -AES-128-CBC
+          cipher = -AES-128-CBC -AES-256-CBC -CAMELLIA-256-CBC -CAMELLIA-128-CBC
+          cipher@SSH = -AES-128-CBC -AES-256-CBC
+        create: yes
+        insertafter: EOF
+      notify: Updating Crypto Policies
+      when: ansible_distribution == 'RedHat' and ansible_distribution_major_version|int >= 8
+
+    - name: "Removing log4j 1.2"
+      dnf:
+        name:
+          - log4j12.noarch
+        state: absent
+
+  handlers:
+    - name: "Restarting SSHD"
+      service:
+        name: sshd
+        state: restarted
+
+    - name: "Restarting SCOM Agent"
+      shell:
+        cmd: "scxadmin -restart"
+
+    - name: "Updating Crypto Policies"
+      shell:
+        cmd: "update-crypto-policies --set {{ crypto_policies_to_enable }}"
