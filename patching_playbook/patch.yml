@@ -1,0 +1,97 @@
+---
+- name: "PLAY - Preflight / localhost stuff"
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  roles:
+    - trigger
+    - check_deployment_var_defined
+    - get_list_of_blacklisted_hosts
+
+
+- name: "PLAY - Patching"
+  hosts: "{{ deployment }}"
+  gather_facts: true
+  serial: 30
+
+  tasks:
+    - block:
+
+      - include_role:
+          name: blacklist
+
+      - include_role:
+          name: satellite_check
+
+      - include_role:
+          name: check_everything_configured
+
+      - include_role:
+          name: yum_clean_all
+
+      - include_role:
+          # This role sets variable "yumoutput.results" to non-zero if patches
+          # are available for the server.
+          name: check_server_needs_update
+
+      - include_role:
+          name: wall
+        when: yumoutput.results|length > 0
+
+      - include_role:
+          name: place_in_maintenance_mode
+        when: yumoutput.results|length > 0
+
+      - include_role:
+          name: stop_applications
+        when: yumoutput.results|length > 0
+
+      - include_role:
+          name: oracle_mm
+        when:
+          - yumoutput.results|length > 0
+          - oracledb_service.stdout != ''
+
+      - include_role:
+          name: take_snapshot
+        when: yumoutput.results|length > 0
+
+      - include_role:
+          name: patch
+        when: yumoutput.results|length > 0
+
+      - include_role:
+          name: reboot
+        when: yumoutput.results|length > 0
+
+      - include_role:
+          name: yum_clean_all
+
+      - include_role:
+          name: post_check
+        when: yumoutput.results|length > 0
+
+      - include_role:
+          name: oracle_mm_stop
+        when:
+          - yumoutput.results|length > 0
+          - oracledb_service.stdout != ''
+
+      - include_role:
+          name: remove_snapshot
+        when: yumoutput.results|length > 0
+
+      always:
+       - import_role:
+           name: summary
+         delegate_to: localhost
+
+- name: "PLAY - Final Word"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  roles:
+    - summary
+    - finalword
