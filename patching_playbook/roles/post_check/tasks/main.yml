@@ -1,0 +1,77 @@
+---
+- name: "Let's wait 1 minute for everything to finish coming back up, before checking patching was successful"
+  pause:
+    minutes: 1
+
+- block:
+  - name: "Making sure any relevant Oracle Databases came back up successfully"
+    shell: ps -e -o cmd | grep ora_pmon_ | grep -v grep | cut -d"_" -f3 | sort
+    register: oracle_back_up
+    failed_when: oracle_back_up.stdout == ""
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Oracle DBs failed to come back up' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "There were Oracle DBs detected on {{ inventory_hostname }}, but they don't appear to have come back up. Please contact an Oracle DBA to make sure the DBs are restarted on {{ inventory_hostname }}."
+  when:
+    - oracledb_service.stdout != ''
+
+- block:
+    - name: "Making sure Splunk came back up successfully"
+      shell: ps -e -o pid,cmd | grep "splunkd.*start" | grep -v -E "grep|process-runner" | awk '{ print $1 }' | head -n 1
+      register: splunk_back_up
+      failed_when: splunk_back_up.stdout == ""
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Splunk failed to come back up' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Splunk was detected on {{ inventory_hostname }}, but it doesn't appear to have come back up. Please check why and start it manually."
+  when: splunk_service.stdout != '0'
+
+- block:
+    - name: "Making sure Tomcat came back up successfully"
+      shell: ps -e -o cmd | grep catalina.startup | grep -v grep | head -n 1
+      register: tomcat_back_up
+      failed_when: tomcat_back_up.stdout == ""
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Tomcat failed to come back up' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Tomcat was detected on {{ inventory_hostname }}, but it doesn't appear to have come back up. Please check why and start it manually."
+  when: tomcat_service.stdout != '0'
+
+- name: "Gathering a list of updated packages"
+  shell: 'rpm -qa --last | grep "$(date +%a\ %d\ %b\ %Y)" | cut -f 1 -d " "'
+  register: yumlistresult
+  changed_when: false
+
+- name: "Adding list of packages, updated today, to a temporary log file in /tmp"
+  shell:
+    cmd: "echo '{{ ansible_date_time.date }} - {{ inventory_hostname }} - {{ yumlistresult.stdout }}' > /tmp/{{ inventory_hostname }}_packages_updated.log"
+  delegate_to: localhost
+
+- block:
+  - name: "Taking each server out of Maintenance Mode in SCOM"
+    uri:
+      url: "http://hostname/MM/Home/InstantMM/?ComputerName={{ inventory_hostname }}.company-name.co.uk&MMAction=Stop"
+      return_content: false
+      timeout: 120
+    delegate_to: localhost
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Failed to remove server from SCOM Maintenance Mode' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Failed to remove {{ inventory_hostname }} from SCOM Maintenance Mode."
+
+- name: "Adding successfully patched server to output.log"
+  shell:
+    cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [  OK  ] Patched' >> /ansible/patching/output.log
+  delegate_to: localhost
