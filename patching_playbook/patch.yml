@@ -22,9 +22,6 @@
           name: blacklist
 
       - include_role:
-          name: satellite_check
-
-      - include_role:
           name: check_everything_configured
 
       - include_role:
@@ -48,12 +45,6 @@
         when: yumoutput.results|length > 0
 
       - include_role:
-          name: oracle_mm
-        when:
-          - yumoutput.results|length > 0
-          - oracledb_service.stdout != ''
-
-      - include_role:
           name: take_snapshot
         when: yumoutput.results|length > 0
 
@@ -73,12 +64,6 @@
         when: yumoutput.results|length > 0
 
       - include_role:
-          name: oracle_mm_stop
-        when:
-          - yumoutput.results|length > 0
-          - oracledb_service.stdout != ''
-
-      - include_role:
           name: remove_snapshot
         when: yumoutput.results|length > 0
 
@@ -94,4 +79,3 @@
 
   roles:
     - summary
-    - finalword
