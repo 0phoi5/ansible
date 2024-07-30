@@ -1,0 +1,22 @@
+---
+- block:
+
+  - name: "Rebooting servers"
+    debug:
+      msg: "!!! WARNING !!! - Now rebooting {{ inventory_hostname }} and then testing it came back up. This may take a few minutes, please wait ... "
+
+  - name: "Reboot output"
+    reboot:
+      connect_timeout: 10
+      pre_reboot_delay: 0
+      post_reboot_delay: 10
+      reboot_timeout: 480
+      test_command: "uname -a"
+
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Server failed to reboot' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Server {{ inventory_hostname }} either failed to reboot, or did not reboot in a timely manner. Please check it manually to make sure it has rebooted and come back up correctly."
