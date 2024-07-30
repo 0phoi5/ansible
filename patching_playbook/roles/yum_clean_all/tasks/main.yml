@@ -1,0 +1,11 @@
+---
+- block:
+  - name: "Running yum clean all on each server"
+    command: yum clean all
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Failed to run yum clean all' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Failed to run yum clean all, on {{ inventory_hostname }}."
