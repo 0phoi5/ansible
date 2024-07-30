@@ -1,0 +1,14 @@
+---
+- block:
+  - name: "Check that each server is not blacklisted from being patched via Ansible"
+    assert:
+      that:
+        - "'{{ inventory_hostname }}' not in '{{ hostvars['localhost']['blacklist_hosts'] }}'"
+      success_msg: "{{ inventory_hostname }} is not blacklisted and can therefore be patched via Ansible."
+  rescue:
+    - name: "Adding reason for failure to output.log"
+      shell:
+        cmd: echo '{{ ansible_date_time.date }} {{ ansible_date_time.time }} - {{ inventory_hostname }} - [ FAIL ] Server is blacklisted' >> /ansible/patching/output.log
+      delegate_to: localhost
+    - fail:
+        msg: "Server {{ inventory_hostname }} is specifically blacklisted, via the 'blacklist' file, from being patched using this Playbook."
