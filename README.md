@@ -33,7 +33,7 @@ ssh_to_dmz.cfg
 # See https://blog.scottlowe.org/2015/12/24/running-ansible-through-ssh-bastion-host/
   
 # Host to jumpbox relationships, amend as required. Make sure SSH keys are in place first.
-Host host1 host2 host3 gba71299
+Host host1 host2 host3
   ProxyCommand ssh -W %h:%p host123
 Host host4 host5 host6
   ProxyCommand ssh -W %h:%p host456
